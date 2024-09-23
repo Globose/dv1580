@@ -1,90 +1,74 @@
-#include <stdio.h>
-#include <stdlib.h>
-
-void mem_init(size_t size);
-void* mem_alloc(size_t size);
-void mem_free(void* block);
-void* mem_resize(void* block, size_t size);
-void mem_deinit();
+#include "memory_manager.h"
 
 typedef struct{
     void *ptr;
     size_t size;
+    int free;
 } MemoryBlock;
 
-typedef struct{
-    MemoryBlock * ptr;
-    size_t pos;
-    size_t size;
-} MemList;
+static void * m_block;
+static size_t m_size;
+static MemoryBlock * blocks;
+static size_t blocks_size;
+static size_t blocks_pos;
 
-static int *main_block;
-static int main_block_size;
-static MemList * free_blocks;
-static MemList * occ_blocks;
-
-static void add_free_block(int *ptr, int size){
-    if (free_blocks->pos >= free_blocks->size){
-        // Resize
-    }
-    free_blocks->ptr[free_blocks->pos].ptr = ptr;
-    free_blocks->ptr[free_blocks->pos].size = size;
-    free_blocks->pos++;
-
-    for (size_t i = 0; i < free_blocks->pos; i++) {
-        printf("Free block %zu: Size = %zu, Pointer = %p\n", i, free_blocks->ptr[i].size, free_blocks->ptr[i].ptr);
-    }
+void pop_mem(size_t index){
+    blocks[index] = blocks[blocks_pos-1];
+    blocks_pos--;
 }
 
-/** 
- * Initializes the memory manager with a specified size of memory pool. 
- * The memory pool could be any data structure, for instance, a large 
- * array or a similar contuguous block of memory. (You do not have to 
- * interact directly with the hardware or the operating system’s 
- * memory management functions).
-*/
+void add_mem(void* ptr, size_t size, int free){
+    // TODO: add space if blockpos > blocksize
+    blocks[blocks_pos] = (MemoryBlock){ptr, size, free};
+    blocks_pos++;
+}
+
+// Initializes the memory manager with a specified size of memory pool. 
 void mem_init(size_t size){
-    printf("Initializing memory of size %ld \n",size);
-    main_block = malloc(size);
-    main_block_size = size;
-    
-    int slot_size = sizeof(void *)+sizeof(int);
-
-    free_blocks = malloc(sizeof(MemList));
-    occ_blocks = malloc(sizeof(MemList));
-
-    free_blocks->ptr = malloc(20*(slot_size));
-    occ_blocks->ptr = malloc(20*(slot_size));
-    free_blocks->pos = 0;
-    occ_blocks->pos = 0;
-    free_blocks->size = 20*(slot_size);
-    free_blocks->size = 20*(slot_size);
-
-    add_free_block(main_block, size);
+    // TODO: om redan init: töm allt
+    m_block = malloc(size);
+    m_size = size;
+    blocks = malloc(sizeof(MemoryBlock)*16);
+    blocks[0] = (MemoryBlock){m_block,size,1};
+    blocks_pos = 1;
+    blocks_size = 16;
 }
 
-/**
- * Allocates a block of memory of the specified size. Find a 
- * suitable block in the pool, mark it as allocated, and return 
- * the pointer to the start of the allocated block.
- */
+// Allocates a block of memory of the specified size. Returns poitiers  
 void* mem_alloc(size_t size){
-    int* p = malloc(sizeof(int));
-    *p = 10;
-    return (void*)p;
+    int block_index = -1;
+    size = (size+7)&~7; // Align size by 8 
+    for (size_t i = 0; i < blocks_pos; i++) {
+        if (blocks[i].free == 1 && blocks[i].size >= size){
+            if (block_index == -1){
+                block_index = i;
+            }
+            else if (blocks[i].size < blocks[block_index].size){
+                block_index = i;
+            } 
+        }
+    }
+    if (block_index == -1) return NULL;
+    void * ptr = blocks[block_index].ptr;
+    void * ptr_next = ptr + size;
+    size_t size_next = blocks[block_index].size-size;
+    pop_mem(block_index);
+    add_mem(ptr, size, 0);
+    add_mem(ptr_next, size_next, 1);
+    return ptr;
 }
 
-/**
- * Frees the specified block of memory. For allocation and deallocation, 
- * you need a way to track which parts of the memory pool are free and which are allocated.
- */
+// Frees the specified block of memory
 void mem_free(void* block){
-    return;
+    for (int i = 0; i < blocks_pos; i++){
+        if (blocks[i].ptr == block){
+            blocks[i].free = 1;
+            return;
+        }
+    }
 }
 
-/**
- * Changes the size of the memory block, possibly moving it.
- */
+// Changes the size of the memory block, possibly moving it.
 void* mem_resize(void* block, size_t size){
     int* p = malloc(sizeof(int));
     *p = 10;
@@ -96,13 +80,23 @@ void* mem_resize(void* block, size_t size){
  * ensuring that all allocated memory is returned to the system.
  */
 void mem_deinit(){
-    return;
+    free(m_block);
 }
 
 int main(){
-    int size = sizeof(int)*4;
+    int size = sizeof(int)*40;
     mem_init(size);
-    printf("Main block ptr %p\n", main_block);
+    void*block = mem_alloc(81);
+    mem_alloc(11);
+    mem_alloc(11);
+    mem_free(block);
+    void *ptr = mem_alloc(60);
+    printf("\n ptr = %p", ptr);
+    printf("--\n");
+    mem_deinit();
+    for (size_t i = 0; i < blocks_pos; i++) {
+        printf("Block %ld: Size = %zu, Pointer = %p, Free= %d, \n", i, blocks[i].size, blocks[i].ptr, blocks[i].free);
+    }
 
     return 0;
 }
