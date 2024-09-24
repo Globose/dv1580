@@ -18,26 +18,49 @@ void pop_mem(struct MemoryBlock* block){
 }
 
 struct MemoryBlock* add_mem(void* ptr, size_t size, int free, struct MemoryBlock* prev, struct MemoryBlock* next){
-    printf("Adding memory %p, %ld, %d, %p, %p\n", ptr, size, free, next, prev);
     struct MemoryBlock* new_block = (struct MemoryBlock*)malloc(sizeof(struct MemoryBlock));
     *new_block = (struct MemoryBlock){ptr,size,free,next,prev};
     prev ? prev->next = new_block: 0;
     next ? next->prev = new_block : 0;
-    printf("Added: n:%p, p:%p\n", next, prev);
     return new_block;
 }
 
 void split_mem(struct MemoryBlock* current_block, size_t size) {
-    printf("Splitting %p, ptr=%p, %ld\n", current_block, current_block->ptr, size);
     size_t new_size = current_block->size-size;
     current_block->free = 0;
     current_block->size = size;
     current_block->next = add_mem(current_block->ptr+new_size, new_size, 1, current_block, current_block->next);
 }
 
-void merge_mem(struct MemoryBlock* block){
-    if (block->next == NULL || block->next->free == 0) return;
-    printf("Merge to stop fragment \n");
+void merge_mem(struct MemoryBlock* block1, struct MemoryBlock* block2){
+    if (block1 == NULL || block2 == NULL) return;
+    if (block1->free == 0 || block2->free == 0) return;
+    block1->next = block2->next;
+    block1->size = block1->size+block2->size;
+    free(block2);
+
+    // if (block->next != NULL && block->next->free){
+    //     size_t new_size = block->size+block->next->size;
+    //     block->next = block->next->next;
+    //     free(block->next);
+    //     block->size = new_size;
+    // }
+    // if (block->prev != NULL && block->prev->free){
+    //     struct MemoryBlock* prev = block->prev;
+    //     size_t new_size = block->size+prev->size;
+    //     prev->next = block->next;
+    //     free(block);
+    //     prev->size = new_size;
+    // }
+}
+
+struct MemoryBlock* get_block(void* block){
+    struct MemoryBlock * current_block = first_block;
+    while (current_block != NULL && current_block->ptr != block){
+        current_block = current_block->next;
+    }
+    if (current_block->ptr != block || current_block == NULL) return NULL;
+    return current_block;
 }
 
 // Initializes the memory manager with a specified size of memory pool. 
@@ -52,28 +75,33 @@ void mem_init(size_t size){
 void* mem_alloc(size_t size){
     size = (size+7)&~7; // Align size by 8 
     struct MemoryBlock* current_block = first_block;
-    while (current_block->free != 1 || current_block->size < size){
-        printf("Looking: Size = %zu, Pointer = %p, Free= %d, \n", current_block->size, current_block->ptr, current_block->free);
+    while (current_block != NULL && (current_block->free != 1 || current_block->size < size)){
         current_block = current_block->next;
     }
+    if (current_block == NULL) return NULL;
     split_mem(current_block, size);
     return current_block->ptr;
 }
 
 // Frees the specified block of memory
 void mem_free(void* block){
-    printf("Freeing %p\n", block);
-    struct MemoryBlock * current_block = first_block;
-    while (current_block != NULL && current_block->ptr != block){
-        current_block = current_block->next;
-    }
-    if (current_block->ptr != block || current_block == NULL) return;
+    struct MemoryBlock * current_block = get_block(block);
+    if (current_block == NULL) return;
     current_block->free = 1;
-    merge_mem(current_block);
+    merge_mem(current_block, current_block->next);
+    merge_mem(current_block->prev, current_block);
 }
 
 // Changes the size of the memory block, possibly moving it.
 void* mem_resize(void* block, size_t size){
+    struct MemoryBlock* current_block = get_block(block);
+    if (current_block == NULL) return NULL;
+    size_t old_size = current_block->size;
+    current_block->free = 1;
+    merge_mem(current_block, current_block->next);
+    // if (current_block->size >= )
+
+    printf("memsize %ld, oldsize = %ld\n", current_block->size, old_size);
     int* p = malloc(sizeof(int));
     *p = 10;
     return (void*)p;
@@ -89,15 +117,15 @@ void mem_deinit(){
 }
 
 int main(){
-    int size = sizeof(int)*40;
+    int size = 160;
     mem_init(size);
     void* block = mem_alloc(40);
-    void* block2 = mem_alloc(40);
-    mem_free(block2);
-    printf("Allocated block %p\n", block);
+    // void* block2 = mem_alloc(40);
+    mem_resize(block, 80);
     // mem_alloc(11);
     // mem_alloc(11);
     // mem_free(block);
+    // mem_free(block2);
     // void *ptr = mem_resize(block, 107);
     // printf("\n ptr = %p", ptr);
     // printf("--\n");
