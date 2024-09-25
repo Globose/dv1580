@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include "memory_manager.h"
 
 typedef struct Node {
     uint16_t data; // Stores the data as an unsigned 16-bit integer

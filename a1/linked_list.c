@@ -1,22 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include "linked_list.h"
 
-// int main(){
-//     printf("Linekd list\n");
-//     return 0;
-// }
-
-/**
- * This function sets up the list and prepares it for operations.
- */
+// This function sets up the list and prepares it for operations.
 void list_init(Node** head){
-    return;
+    // mem_init(2048);
+    *head = (Node*)malloc(sizeof(Node));
+    **head = (Node){0,NULL};
 }
 
-/**
- * Adds a new node with the specified data to the linked list. 
- */
+// Adds a new node with the specified data to the linked list. 
 void list_insert(Node** head, int data){
     return;
 }
@@ -70,4 +61,20 @@ int list_count_nodes(Node** head){
  */
 void list_cleanup(Node** head){
     return;
+}
+
+void list(Node* root){
+    Node* node = root;
+    while (node != NULL){
+        printf("%p: %d, -> %p\n",node, node->data, node->next);
+        node = node->next;
+    }
+}
+
+int main (){
+    Node* head = NULL;
+    list_init(&head);
+    printf("Head %p\n", head);
+    printf("headvalue %d", head->data);
+    return 0;
 }
