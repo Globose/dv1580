@@ -34,6 +34,7 @@ void merge_mem(struct MemoryBlock* block1, struct MemoryBlock* block2){
     if (block1->free == 0 || block2->free == 0) return;
     block1->next = block2->next;
     block1->size = block1->size+block2->size;
+    if (block2->next != NULL) block2->next->prev = block1;
     free(block2);
 }
 
@@ -86,7 +87,7 @@ void* mem_resize(void* block, size_t size){
     
     if (current_block->size >= size){
         split_mem(current_block, size);
-        return current_block;   
+        return current_block->ptr;   
     }
     else{
         void* ptr = mem_alloc(size);
@@ -110,3 +111,4 @@ void mem_deinit(){
     free(m_block);
     first_block = NULL;
 }
+
