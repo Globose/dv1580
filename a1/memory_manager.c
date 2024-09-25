@@ -11,7 +11,6 @@ struct MemoryBlock{
 static void * m_block;
 static size_t m_size;
 static struct MemoryBlock * first_block;
-static struct MemoryBlock * last_block;
 
 struct MemoryBlock* add_mem(void* ptr, size_t size, int free, struct MemoryBlock* prev, struct MemoryBlock* next){
     if (size == 0) return next;
@@ -90,38 +89,24 @@ void* mem_resize(void* block, size_t size){
         return current_block;   
     }
     else{
-        void* ptr = mem_alloc(size); // Mb not remove if fail?
-        if (ptr == NULL) return NULL;
+        void* ptr = mem_alloc(size);
+        if (ptr == NULL){
+            current_block->free = 0;
+            return NULL;
+        } 
         memcpy(ptr, current_block->ptr, old_size);
         return ptr;
     }
 }
 
-/**
- * Frees up the memory pool that was initially allocated by the mem_init function, 
- * ensuring that all allocated memory is returned to the system.
- */
+// Frees up the memory pool
 void mem_deinit(){
-    // Also remove metadata
-    free(m_block);
-}
-
-void list(){
-    printf("\nListing all blocks:\n");
-    struct MemoryBlock * current_block = first_block;
+    struct MemoryBlock* current_block = first_block;
     while (current_block != NULL){
-        printf("Block %p: Size = %zu, Pointer = %p, Free= %d, prev = %p, next = %p \n",current_block, current_block->size, current_block->ptr, current_block->free, current_block->prev, current_block->next);
-        current_block = current_block->next;
+        struct MemoryBlock* ptr = current_block->next;
+        free(current_block);
+        current_block = ptr;
     }
-}
-
-int main(){
-    int size = 100;
-    mem_init(size);
-    void* block = mem_alloc(8);
-    void* block2 = mem_alloc(8);
-    void* block3 = mem_resize(block, 16);
-    void* block4 = mem_alloc(8);
-    list();
-    return 0;
+    free(m_block);
+    first_block = NULL;
 }
