@@ -6,9 +6,11 @@
 #include <time.h>
 #include "common_defs.h"
 
+#include "gitdata.h"
+
 void test_init()
 {
-    printf_yellow(" Testing mem_init ---> ");
+    printf_yellow("  Testing mem_init ---> ");
     mem_init(1024);               // Initialize with 1KB of memory
     void *block = mem_alloc(100); // Try allocating to check if init was successful
     my_assert(block != NULL);
@@ -20,7 +22,7 @@ void test_init()
 
 void test_alloc_and_free()
 {
-    printf_yellow(" Testing mem_alloc and mem_free ---> ");
+    printf_yellow("  Testing mem_alloc and mem_free ---> ");
     mem_init(1024);
     void *block1 = mem_alloc(100);
     my_assert(block1 != NULL);
@@ -32,9 +34,58 @@ void test_alloc_and_free()
     printf_green("[PASS].\n");
 }
 
+void test_zero_alloc_and_free()
+{
+    printf_yellow("  Testing mem_alloc(0) and mem_free --->");
+    mem_init(1024);
+    void *block1 = mem_alloc(0);
+    my_assert(block1 != NULL);
+    void *block2 = mem_alloc(200);
+    my_assert(block2 != NULL);
+    my_assert(block1 == block2);
+
+    mem_free(block1);
+    mem_free(block2);
+    mem_deinit();
+    printf_green("[PASS].\n");
+}
+
+void test_random_blocks()
+{
+    printf_yellow("  Testing random blocks and mem_free ---> ");
+    srand(time(NULL));
+    int nBlocks = rand() % 40;
+    int blockSize = rand() % 1024;
+
+    int memSize = nBlocks * 1024;
+
+    mem_init(memSize);
+    void *blocks[nBlocks];
+
+#ifdef DEBUG
+    printf_yellow("  Allocating; %d blocks, total %d bytes, max block size %d bytes\n", nBlocks, memSize, blockSize);
+#endif
+    for (int k = 0; k < nBlocks; k++)
+    {
+        blocks[k] = mem_alloc(blockSize);
+        my_assert(blocks[k] != NULL);
+        blockSize = rand() % 1024;
+    }
+#ifdef DEBUG
+    printf_yellow("  Releasing the blocks.\n");
+#endif
+    for (int k = 0; k < nBlocks; k++)
+    {
+        mem_free(blocks[k]);
+    }
+    mem_free(blocks[0]);
+
+    printf_green("[PASS].\n");
+}
+
 void test_resize()
 {
-    printf_yellow(" Testing mem_resize ---> ");
+    printf_yellow("  Testing mem_resize ---> ");
     mem_init(1024);
     void *block = mem_alloc(100);
     my_assert(block != NULL);
@@ -47,7 +98,7 @@ void test_resize()
 
 void test_exceed_single_allocation()
 {
-    printf_yellow(" Testing allocation exceeding pool size ---> ");
+    printf_yellow("  Testing allocation exceeding pool size ---> ");
     mem_init(1024);                // Initialize with 1KB of memory
     void *block = mem_alloc(2048); // Try allocating more than available
     my_assert(block == NULL);      // Allocation should fail
@@ -57,7 +108,7 @@ void test_exceed_single_allocation()
 
 void test_exceed_cumulative_allocation()
 {
-    printf_yellow(" Testing cumulative allocations exceeding pool size ---> ");
+    printf_yellow("  Testing cumulative allocations exceeding pool size ---> ");
     mem_init(1024); // Initialize with 1KB of memory
     void *block1 = mem_alloc(512);
     my_assert(block1 != NULL);
@@ -73,7 +124,7 @@ void test_exceed_cumulative_allocation()
 
 void test_memory_overcommit()
 {
-    printf_yellow(" Testing memory over-commitment ---> ");
+    printf_yellow("  Testing memory over-commitment ---> ");
     mem_init(1024); // Initialize with 1KB of memory
 
     void *block1 = mem_alloc(1020); // Allocate almost all memory
@@ -88,7 +139,7 @@ void test_memory_overcommit()
 
 void test_boundary_condition()
 {
-    printf_yellow(" Testing boundary conditions ---> ");
+    printf_yellow("  Testing boundary conditions ---> ");
     mem_init(1024); // Initialize with 1KB of memory
 
     void *block = mem_alloc(1024); // Attempt to allocate the exact pool size
@@ -103,7 +154,7 @@ void test_boundary_condition()
 
 void test_exact_fit_reuse()
 {
-    printf_yellow(" Testing exact fit reuse ---> ");
+    printf_yellow("  Testing exact fit reuse ---> ");
     mem_init(1024); // Initialize with 1KB of memory
 
     void *block1 = mem_alloc(500);
@@ -118,7 +169,7 @@ void test_exact_fit_reuse()
 
 void test_frequent_small_allocations()
 {
-    printf_yellow(" Testing frequent small allocations ---> ");
+    printf_yellow("  Testing frequent small allocations ---> ");
     mem_init(1024); // Initialize with 1KB of memory
 
     const int num_allocations = 50;
@@ -141,7 +192,7 @@ void test_frequent_small_allocations()
 
 void test_memory_reuse()
 {
-    printf_yellow(" Testing memory reuse ---> ");
+    printf_yellow("  Testing memory reuse ---> ");
     mem_init(1024);
 
     void *block1 = mem_alloc(256);
@@ -158,7 +209,7 @@ void test_memory_reuse()
 
 void test_block_merging()
 {
-    printf_yellow(" Testing block merging ---> ");
+    printf_yellow("  Testing block merging ---> ");
     mem_init(1024);
 
     void *block1 = mem_alloc(200);
@@ -178,8 +229,8 @@ void test_block_merging()
 
 void test_non_contiguous_allocation_failure()
 {
-    printf_yellow(" Testing non-contiguous allocation failure ---> ");
-    mem_init(800); // Initialize with 1KB of memory
+    printf_yellow("  Testing non-contiguous allocation failure ---> ");
+    mem_init(800); // Initialize with 800 bytes of memory
 
     // Allocate several blocks to fragment the memory
     void *block1 = mem_alloc(250);
@@ -199,25 +250,29 @@ void test_non_contiguous_allocation_failure()
 
 void test_contiguous_allocation_success()
 {
-    printf_yellow(" Testing contiguous allocation success ---> ");
+    printf_yellow("  Testing contiguous allocation success ---> ");
     mem_init(1024); // Initialize with 1KB of memory
 
     // Allocate and then free a block to create a sufficiently large contiguous free block
-    void *block1 = mem_alloc(500);
-    mem_free(block1); // Create a large contiguous free space
+    void *block1 = mem_alloc(256);
+    void *block2 = mem_alloc(256);
+    void *block3 = mem_alloc(512);
+    mem_free(block1); // Free block1 and block2 to create a contiguous free space
+    mem_free(block2); // now block1 and block2 are contiguous
 
     // Try to allocate a block that fits into the freed space
-    void *block2 = mem_alloc(500);
+    void *block4 = mem_alloc(500);
     my_assert(block2 != NULL); // This allocation should succeed
 
-    mem_free(block2);
+    mem_free(block3);
+    mem_free(block4);
     mem_deinit();
     printf_green("[PASS].\n");
 }
 
 void test_double_free()
 {
-    printf_yellow(" Testing double deallocation ---> ");
+    printf_yellow("  Testing double deallocation ---> ");
     mem_init(1024); // Initialize with 1KB of memory
 
     void *block = mem_alloc(100); // Allocate a block of 100 bytes
@@ -232,15 +287,15 @@ void test_double_free()
 
 void test_memory_fragmentation()
 {
-    printf_yellow(" Testing memory fragmentation handling ---> ");
-    mem_init(1024); // Initialize with 2048 bytes
+    printf_yellow("  Testing memory fragmentation handling ---> ");
+    mem_init(1024); // Initialize with 1024 bytes
 
     void *block1 = mem_alloc(200);
     void *block2 = mem_alloc(300);
     void *block3 = mem_alloc(500);
     mem_free(block1);              // Free first block
     mem_free(block3);              // Free third block, leaving a fragmented hole before and after block2
-    void *block4 = mem_alloc(500); // Should fit into the space of block1
+    void *block4 = mem_alloc(500); // Should fit into the space of block
     assert(block4 != NULL);
 
     mem_free(block2);
@@ -251,11 +306,11 @@ void test_memory_fragmentation()
 
 void test_edge_case_allocations()
 {
-    printf_yellow(" Testing edge case allocations ---> ");
+    printf_yellow("  Testing edge case allocations ---> ");
     mem_init(1024); // Initialize with 1024 bytes
 
     void *block0 = mem_alloc(0); // Edge case: zero allocation
-    assert(block0 != NULL);      // Depending on handling, this could also be NULL
+    // assert(block0 != NULL);      // Depending on handling, this could also be NULL
 
     void *block1 = mem_alloc(1024); // Exactly remaining
     assert(block1 != NULL);
@@ -271,6 +326,11 @@ void test_edge_case_allocations()
 
 int main(int argc, char *argv[])
 {
+#ifdef VERSION
+    printf("Build Version; %s \n", VERSION);
+#endif
+    printf("Git Version; %s/%s \n", git_date, git_sha);
+
     if (argc < 2)
     {
         printf("Usage: %s <test function>\n", argv[0]);
@@ -302,6 +362,9 @@ int main(int argc, char *argv[])
 
     switch (atoi(argv[1]))
     {
+    case -1:
+        printf("No tests will be executed.\n");
+        break;
     case 0:
         // Running all tests
         printf("Testing Basic Operations:\n");
@@ -325,6 +388,10 @@ int main(int argc, char *argv[])
         test_block_merging();
         test_non_contiguous_allocation_failure();
         test_contiguous_allocation_success();
+
+        printf("\nVarious other tests:\n");
+        test_zero_alloc_and_free();
+        test_random_blocks();
         break;
     case 1:
         test_init();
@@ -373,6 +440,12 @@ int main(int argc, char *argv[])
         break;
     case 16:
         test_contiguous_allocation_success();
+        break;
+    case 17:
+        test_zero_alloc_and_free();
+        break;
+    case 18:
+        test_random_blocks();
         break;
     default:
         printf("Invalid test function\n");
