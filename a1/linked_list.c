@@ -94,24 +94,14 @@ Node* list_search(Node** head, int data){
 // Prints all the elements in the linked list as a list separated by commas, enclosed in square brackets.
 void list_display_range(Node** head, Node* start_node, Node* end_node){
     printf("[");
-    Node* node = *head;
-    int print = 0;
     if (start_node == NULL) {
-        print = 1;
+        start_node = *head;
     }
-    while (node != NULL){
-        if (!print && node == start_node){
-            print = 1;
-        }
-        if (print){
-            printf("%d",node->data);
-        }
-        if (node == end_node) break;
-        node = node->next;
-        if (print && node != NULL){
-            printf(", ");
-        }
-
+    while (start_node != NULL){
+        printf("%d", start_node->data);
+        if (start_node == end_node) break;
+        start_node = start_node->next;
+        if (start_node != NULL) printf(", ");
     }
     printf("]");
 }
@@ -140,5 +130,6 @@ void list_cleanup(Node** head){
         mem_free(old_node);
     }
     *head = NULL;
+    mem_deinit();
 }
 
