@@ -1,0 +1,9 @@
+
+*.so
+a1/linked_list
+*.o
+a1/memory_manager
+a1/test_linked_list
+a1/test_memory_manager
+a2/test_linked_list
+a2/test_memory_manager

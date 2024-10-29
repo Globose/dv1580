@@ -1,16 +1,17 @@
 #include "memory_manager.h"
 
-struct MemoryBlock{
+typedef struct MemoryBlock{
     void *ptr;
     size_t size;
     int free;
     struct MemoryBlock* next;
     struct MemoryBlock* prev;
-};
+} MemoryBlock;
 
-static void * m_block;
+static void* m_block;
 static size_t m_size;
-static struct MemoryBlock * first_block;
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static MemoryBlock* first_block;
 
 /**
  * @brief  Creates a new memory block and metadata for it
@@ -19,10 +20,10 @@ static struct MemoryBlock * first_block;
  * @return MemoryBlock*     Pointer to the new memory block.
  * @note    - Only merges if both memory blocks are free.
  */
-struct MemoryBlock* add_mem(void* ptr, size_t size, int free, struct MemoryBlock* prev, struct MemoryBlock* next){
+struct MemoryBlock* add_mem(void* ptr, size_t size, int free, MemoryBlock* prev, MemoryBlock* next){
     if (size == 0) return next;
-    struct MemoryBlock* new_block = (struct MemoryBlock*)malloc(sizeof(struct MemoryBlock));
-    *new_block = (struct MemoryBlock){ptr,size,free,next,prev};
+    MemoryBlock* new_block = (MemoryBlock*)malloc(sizeof(MemoryBlock));
+    *new_block = (MemoryBlock){ptr,size,free,next,prev};
     prev ? prev->next = new_block: 0;
     next ? next->prev = new_block : 0;
     return new_block;
@@ -33,7 +34,7 @@ struct MemoryBlock* add_mem(void* ptr, size_t size, int free, struct MemoryBlock
  * @param  current_block    Pointer to the memory block.
  * @param  size     Size of the first part of the memory block.
  */
-void split_mem(struct MemoryBlock* current_block, size_t size) {
+void split_mem(MemoryBlock* current_block, size_t size) {
     size_t new_size = current_block->size-size;
     current_block->free = 0;
     current_block->size = size;
@@ -47,7 +48,7 @@ void split_mem(struct MemoryBlock* current_block, size_t size) {
  * @param  block2   Pointer to the second memory block.
  * @note    - Only merges if both memory blocks are free.
  */
-void merge_mem(struct MemoryBlock* block1, struct MemoryBlock* block2){
+void merge_mem(MemoryBlock* block1, MemoryBlock* block2){
     if (block1 == NULL || block2 == NULL) return;
     if (block1->free == 0 || block2->free == 0) return;
     block1->next = block2->next;
@@ -57,26 +58,9 @@ void merge_mem(struct MemoryBlock* block1, struct MemoryBlock* block2){
 }
 
 /**
- * @brief  Searches for a matching memory block
- * @param  block     Pointer to the memory block ptr.
- * @return MemoryBlock*     Pointer to the memory block.
- * @note    - Returns NULL if no matching block is found.
- */
-
-struct MemoryBlock* get_block(void* block){
-    struct MemoryBlock * current_block = first_block;
-    while (current_block != NULL && current_block->ptr != block){
-        current_block = current_block->next;
-    }
-    if (current_block->ptr != block || current_block == NULL) return NULL;
-    return current_block;
-}
-
-/**
  * @brief  Initializes the memory manager with a specified size of memory pool.
  * @param  size     Size of memory pool.
- * @note
- * - If size <0, no pool will be allocated. If size=0 an empty pool will be created.
+ * @note - If size <0, no pool will be allocated. If size=0 an empty pool will be created.
  */
 void mem_init(size_t size){
     if (size < 0) return;
@@ -88,19 +72,36 @@ void mem_init(size_t size){
 /**
  * @brief  Allocates a block of memory of the specified size.
  * @param  size Size of memory block.
+ * @return void*  A pointer to the block.
+ * @note
+ * - No pthread_lock used
+ */
+void* internal_mem_alloc(size_t size){
+    MemoryBlock* current_block = first_block;
+    while (current_block != NULL && (current_block->free != 1 || current_block->size < size)){
+        current_block = current_block->next;
+    }
+
+    if (current_block == NULL){
+        pthread_mutex_unlock(&lock);
+        return NULL;  
+    } 
+    split_mem(current_block, size);
+    return current_block->ptr;
+}
+
+/**
+ * @brief  Allocates a block of memory of the specified size.
+ * @param  size Size of memory block.
  * @return void*    A pointer to the block.
  * @note
  * - If memory allocation fails it will return NULL
  */
 void* mem_alloc(size_t size){
-    size = (size+7)&~7;
-    struct MemoryBlock* current_block = first_block;
-    while (current_block != NULL && (current_block->free != 1 || current_block->size < size)){
-        current_block = current_block->next;
-    }
-    if (current_block == NULL) return NULL;
-    split_mem(current_block, size);
-    return current_block->ptr;
+    pthread_mutex_lock(&lock);
+    void* ptr = internal_mem_alloc(size);
+    pthread_mutex_unlock(&lock);
+    return ptr;
 }
 
 /**
@@ -110,11 +111,22 @@ void* mem_alloc(size_t size){
  * - Does nothing if block is not in the pool.
  */
 void mem_free(void* block){
-    struct MemoryBlock * current_block = get_block(block);
-    if (current_block == NULL) return;
+    if (block == NULL) return;
+
+    pthread_mutex_lock(&lock);
+    MemoryBlock * current_block = first_block;
+    while (current_block != NULL && current_block->ptr != block){
+        current_block = current_block->next;
+    }
+
+    if (current_block == NULL || current_block->ptr != block){
+        pthread_mutex_unlock(&lock);
+        return;
+    }
     current_block->free = 1;
     merge_mem(current_block, current_block->next);
     merge_mem(current_block->prev, current_block);
+    pthread_mutex_unlock(&lock);
 }
 
 /**
@@ -127,41 +139,50 @@ void mem_free(void* block){
  */
 
 void* mem_resize(void* block, size_t size){
-    size = (size+7)&~7;
-    struct MemoryBlock* current_block = get_block(block);
-    if (current_block == NULL) return NULL;
+    pthread_mutex_lock(&lock);
+    MemoryBlock * current_block = first_block;
+    while (current_block != NULL && current_block->ptr != block){
+        current_block = current_block->next;
+    }
+
+    if (current_block == NULL || current_block->ptr != block){
+        pthread_mutex_unlock(&lock);
+        return NULL;
+    } 
     
     size_t old_size = current_block->size;
     current_block->free = 1;
     merge_mem(current_block, current_block->next);
     
+    void* return_ptr = NULL;
     if (current_block->size >= size){
         split_mem(current_block, size);
-        return current_block->ptr;   
+        return_ptr = current_block->ptr;   
     }
     else{
-        void* ptr = mem_alloc(size);
+        void* ptr = internal_mem_alloc(size);
         if (ptr == NULL){
             current_block->free = 0;
-            return NULL;
         } 
-        memcpy(ptr, current_block->ptr, old_size);
-        return ptr;
+        else{
+            memcpy(ptr, current_block->ptr, old_size);
+        }
+        return_ptr = ptr;
     }
+    pthread_mutex_unlock(&lock);
+    return return_ptr;
 }
-
 
 /**
  * @brief  Frees up the memory pool
  */
 void mem_deinit(){
-    struct MemoryBlock* current_block = first_block;
+    MemoryBlock* current_block = first_block;
     while (current_block != NULL){
-        struct MemoryBlock* ptr = current_block->next;
+        MemoryBlock* ptr = current_block->next;
         free(current_block);
         current_block = ptr;
     }
     free(m_block);
     first_block = NULL;
 }
-
